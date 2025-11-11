@@ -1,14 +1,33 @@
 import 'package:equatable/equatable.dart';
 
+/// Modello immutabile per rappresentare un documento PDF
+/// Ottimizzato con Equatable per confronti efficienti e prestazioni superiori
 class PdfDocument extends Equatable {
+  /// Identificatore unico del documento
   final String id;
+  
+  /// Nome visualizzato del file
   final String name;
+  
+  /// Percorso completo del file su disco
   final String filePath;
+  
+  /// Dimensione del file in bytes
   final int fileSize;
+  
+  /// Timestamp dell'ultima modifica
   final DateTime lastModified;
+  
+  /// Indica se il documento è protetto da password
   final bool isPasswordProtected;
+  
+  /// Indica se il documento contiene testo ricercabile (OCR)
   final bool hasSearchableText;
+  
+  /// Numero totale di pagine nel documento
   final int pageCount;
+  
+  /// Percorso dell'anteprima/thumbnail (opzionale)
   final String? thumbnailPath;
   
   const PdfDocument({
@@ -23,6 +42,8 @@ class PdfDocument extends Equatable {
     this.thumbnailPath,
   });
   
+  /// Metodo copyWith ottimizzato per creare copie con valori modificati
+  /// Essenziale per pattern immutabili e gestione stato efficiente
   PdfDocument copyWith({
     String? id,
     String? name,
@@ -47,6 +68,7 @@ class PdfDocument extends Equatable {
     );
   }
   
+  /// Props per Equatable - ottimizza confronti e previene rebuild non necessari
   @override
   List<Object?> get props => [
         id,

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import '../widgets/pdf_viewer.dart';
 import '../widgets/warning_banner.dart';
-import '../widgets/drawing_toolbar.dart';
+// import '../widgets/drawing_toolbar.dart'; // TODO: Riabilitare quando implementato
 import '../providers/pdf_viewer_provider.dart';
 import '../../data/models/pdf_document.dart';
 
@@ -25,7 +25,10 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
   @override
   void initState() {
     super.initState();
+    // Inizializza controller PDF con gestione ottimizzata del ciclo di vita
     _pdfController = pdfrx.PdfViewerController();
+    
+    // Carica documento dopo il frame build per evitare blocchi UI
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(pdfViewerProvider.notifier).loadDocument(widget.document);
     });
@@ -33,222 +36,261 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch providers ottimizzati - rebuild solo quando necessario
     final viewerState = ref.watch(pdfViewerProvider);
-    final isDrawingMode = ref.watch(drawingModeProvider);
+    // TODO: Implementare drawingModeProvider quando disponibile
+    final isDrawingMode = false; // ref.watch(drawingModeProvider);
     
     return Scaffold(
       body: Stack(
         children: [
-          // Main content
+          // Contenuto principale con layout ottimizzato
           Column(
             children: [
-              // Top bar with document info
-              Container(
-                height: 60,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.document.name,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    // PDF controls in title bar
-                    _PdfControls(
-                      document: widget.document,
-                      controller: _pdfController,
-                    ),
-                    PopupMenuButton<String>(
-                      onSelected: (value) {
-                        switch (value) {
-                          case 'print':
-                            _printPdf();
-                            break;
-                          case 'share':
-                            _sharePdf();
-                            break;
-                          case 'info':
-                            _showDocumentInfo();
-                            break;
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'print',
-                          child: Row(
-                            children: [
-                              Icon(Icons.print),
-                              SizedBox(width: 8),
-                              Text('Stampa'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'share',
-                          child: Row(
-                            children: [
-                              Icon(Icons.share),
-                              SizedBox(width: 8),
-                              Text('Condividi'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'info',
-                          child: Row(
-                            children: [
-                              Icon(Icons.info_outline),
-                              SizedBox(width: 8),
-                              Text('Informazioni'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              // Barra superiore con informazioni documento e controlli
+              _buildTopBar(context),
               
-              // PDF content area
+              // Area contenuto PDF
               Expanded(
-                child: Stack(
-                  children: [
-                    // Warning banner for non-OCR PDFs
-                    if (!widget.document.hasSearchableText)
-                      const Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: WarningBanner(),
-                      ),
-                    
-                    // PDF Viewer
-                    Positioned.fill(
-                      top: !widget.document.hasSearchableText ? 60 : 0,
-                      child: viewerState.isLoading 
-                          ? const Center(
-                              child: CircularProgressIndicator(),
-                            )
-                          : viewerState.error != null
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.error_outline,
-                                        size: 64,
-                                        color: Colors.red,
-                                      ),
-                                      const SizedBox(height: 16),
-                                      const Text(
-                                        'Errore nel caricamento del PDF',
-                                        style: TextStyle(fontSize: 16),
-                                      ),
-                                      if (widget.document.isPasswordProtected)
-                                        Padding(
-                                          padding: const EdgeInsets.all(16.0),
-                                          child: ElevatedButton(
-                                            onPressed: _showPasswordDialog,
-                                            child: const Text('Inserisci password'),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                )
-                              : PdfViewerWidget(
-                                  state: viewerState,
-                                  document: widget.document,
-                                  controller: _pdfController,
-                                ),
-                    ),
-                    
-                    // Drawing toolbar
-                    if (isDrawingMode)
-                      const Positioned(
-                        bottom: 16,
-                        left: 16,
-                        right: 16,
-                        child: DrawingToolbar(),
-                      ),
-                  ],
-                ),
+                child: _buildPdfContentArea(context, viewerState),
               ),
             ],
           ),
         ],
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
+      // Floating action buttons ottimizzati
+      floatingActionButton: _buildFloatingActions(context, isDrawingMode),
+    );
+  }
+
+  /// Costruisce la barra superiore con controlli documento
+  Widget _buildTopBar(BuildContext context) {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
         children: [
-          // Drawing mode toggle
-          FloatingActionButton(
-            heroTag: "drawing",
-            onPressed: () {
-              // TODO: Implement drawing mode toggle
-            },
-            backgroundColor: isDrawingMode 
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.surface,
-            child: Icon(
-              isDrawingMode ? Icons.close : Icons.edit,
-              color: isDrawingMode 
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : Theme.of(context).colorScheme.onSurface,
+          // Nome documento con ellipsis per overflow
+          Expanded(
+            child: Text(
+              widget.document.name,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(height: 16),
-          // Page navigation
-          FloatingActionButton(
-            heroTag: "navigation",
-            onPressed: _showPageNavigation,
-            child: const Icon(Icons.menu),
+          
+          // Controlli PDF integrati nella barra
+          _PdfControls(
+            document: widget.document,
+            controller: _pdfController,
           ),
+          
+          // Menu azioni documento
+          _buildActionMenu(context),
         ],
       ),
     );
   }
 
+  /// Costruisce il menu azioni con opzioni stampa, condivisione e info
+  Widget _buildActionMenu(BuildContext context) {
+    return PopupMenuButton<String>(
+      onSelected: _handleMenuAction,
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'print',
+          child: Row(
+            children: [
+              Icon(Icons.print),
+              SizedBox(width: 8),
+              Text('Stampa'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'share',
+          child: Row(
+            children: [
+              Icon(Icons.share),
+              SizedBox(width: 8),
+              Text('Condividi'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'info',
+          child: Row(
+            children: [
+              Icon(Icons.info_outline),
+              SizedBox(width: 8),
+              Text('Informazioni'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Gestisce le azioni del menu in modo centralizzato
+  void _handleMenuAction(String value) {
+    switch (value) {
+      case 'print':
+        _printPdf();
+        break;
+      case 'share':
+        _sharePdf();
+        break;
+      case 'info':
+        _showDocumentInfo();
+        break;
+    }
+  }
+
+  /// Costruisce l'area contenuto PDF con gestione stati ottimizzata
+  Widget _buildPdfContentArea(BuildContext context, PdfViewerState viewerState) {
+    return Stack(
+      children: [
+        // Banner avviso per PDF senza testo ricercabile
+        if (!widget.document.hasSearchableText)
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: WarningBanner(),
+          ),
+        
+        // Visualizzatore PDF con gestione stati
+        Positioned.fill(
+          top: !widget.document.hasSearchableText ? 60 : 0,
+          child: _buildPdfViewer(context, viewerState),
+        ),
+      ],
+    );
+  }
+
+  /// Costruisce il visualizzatore PDF con gestione loading/error states
+  Widget _buildPdfViewer(BuildContext context, PdfViewerState viewerState) {
+    if (viewerState.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    if (viewerState.error != null) {
+      return _buildErrorState(context, viewerState.error!);
+    }
+    
+    return PdfViewerWidget(
+      state: viewerState,
+      document: widget.document,
+      controller: _pdfController,
+    );
+  }
+
+  /// Costruisce l'interfaccia di errore con opzioni appropriate
+  Widget _buildErrorState(BuildContext context, String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Errore nel caricamento del PDF',
+            style: TextStyle(fontSize: 16),
+          ),
+          if (widget.document.isPasswordProtected)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton(
+                onPressed: _showPasswordDialog,
+                child: const Text('Inserisci password'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Costruisce i floating action buttons ottimizzati
+  Widget _buildFloatingActions(BuildContext context, bool isDrawingMode) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Toggle modalità disegno
+        FloatingActionButton(
+          heroTag: "drawing",
+          onPressed: () {
+            // TODO: Implementare toggle modalità disegno
+          },
+          backgroundColor: isDrawingMode 
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.surface,
+          child: Icon(
+            isDrawingMode ? Icons.close : Icons.edit,
+            color: isDrawingMode 
+                ? Theme.of(context).colorScheme.onPrimary
+                : Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 16),
+        
+        // Navigazione pagine
+        FloatingActionButton(
+          heroTag: "navigation",
+          onPressed: _showPageNavigation,
+          child: const Icon(Icons.menu),
+        ),
+      ],
+    );
+  }
+              
+              
+
+  /// Stampa il documento PDF utilizzando il servizio di stampa
   void _printPdf() {
-    // TODO: Implement printing
+    // TODO: Implementare stampa con PdfService.printPdf()
   }
 
+  /// Condivide il documento PDF tramite platform share
   void _sharePdf() {
-    // TODO: Implement sharing
+    // TODO: Implementare condivisione file
   }
 
+  /// Mostra dialogo informazioni documento con formattazione ottimizzata
   void _showDocumentInfo() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Informazioni documento'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Nome: ${widget.document.name}'),
-            Text('Dimensione: ${_formatFileSize(widget.document.fileSize)}'),
-            Text('Pagine: ${widget.document.pageCount}'),
-            Text('Protetto: ${widget.document.isPasswordProtected ? "Sì" : "No"}'),
-            Text('Testo ricercabile: ${widget.document.hasSearchableText ? "Sì" : "No"}'),
-            Text('Modificato: ${_formatDate(widget.document.lastModified)}'),
+            _buildInfoRow('Nome:', widget.document.name),
+            _buildInfoRow('Dimensione:', _formatFileSize(widget.document.fileSize)),
+            _buildInfoRow('Pagine:', widget.document.pageCount.toString()),
+            _buildInfoRow('Protetto:', widget.document.isPasswordProtected ? "Sì" : "No"),
+            _buildInfoRow('Testo ricercabile:', widget.document.hasSearchableText ? "Sì" : "No"),
+            _buildInfoRow('Modificato:', _formatDate(widget.document.lastModified)),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Chiudi'),
           ),
         ],
@@ -256,22 +298,52 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
     );
   }
 
+  /// Costruisce una riga informativa formattata per il dialogo
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(
+            child: Text(value),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mostra dialogo per inserimento password documenti protetti
   void _showPasswordDialog() {
-    // TODO: Implement password dialog
+    // TODO: Implementare dialogo password con validazione
   }
 
+  /// Mostra navigazione rapida pagine con miniatura anteprime
   void _showPageNavigation() {
-    // TODO: Implement page navigation
+    // TODO: Implementare navigazione pagine con thumbnails
   }
 
+  /// Formatta dimensione file in formato leggibile ottimizzato
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  /// Formatta data in formato italiano ottimizzato
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$day/$month/${date.year} $hour:$minute';
   }
 }
 
@@ -280,7 +352,6 @@ class _PdfControls extends StatefulWidget {
   final pdfrx.PdfViewerController controller;
 
   const _PdfControls({
-    super.key,
     required this.document,
     required this.controller,
   });
@@ -413,7 +484,7 @@ class _PdfControlsState extends State<_PdfControls> {
               ),
               child: Text(
                 widget.controller.isReady
-                    ? '${widget.controller.document?.pages.length ?? 0} pagine'
+                    ? '${widget.controller.document.pages.length} pagine'
                     : 'Caricamento...',
                 style: TextStyle(
                   fontSize: 12,
@@ -425,7 +496,7 @@ class _PdfControlsState extends State<_PdfControls> {
             IconButton(
               onPressed: widget.controller.isReady
                   ? () => widget.controller.goToPage(
-                        pageNumber: widget.controller.document!.pages.length,
+                        pageNumber: widget.controller.document.pages.length,
                       )
                   : null,
               icon: const Icon(Icons.keyboard_arrow_right, size: 20),
