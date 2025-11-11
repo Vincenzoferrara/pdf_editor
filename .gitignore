@@ -1,0 +1,53 @@
+# Editor PDF
+
+*.iml
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Android
+android/app/release
+android/app/profile
+android/app/debug
+
+# iOS
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/Pods/
+ios/.symlinks/
+
+# Linux
+linux/flutter/ephemeral/
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugins.cmake
+
+# Windows
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugins.cmake
+
+# macOS
+macos/Flutter/ephemeral/
+macos/Flutter/flutter_export_environment.sh
+macos/Flutter/generated_plugin_registrant.cc
+macos/Flutter/generated_plugins.cmake
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
