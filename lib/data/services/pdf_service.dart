@@ -1,7 +1,11 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:printing/printing.dart';
-import '../models/pdf_document.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import '../models/pdf_document.dart' as app_doc;
 import '../../core/utils/file_utils.dart';
 
 /// Servizio ottimizzato per la gestione dei documenti PDF
@@ -9,7 +13,7 @@ import '../../core/utils/file_utils.dart';
 class PdfService {
   /// Carica un documento PDF con analisi ottimizzata delle proprietà
   /// Utilizza approccio lightweight per prestazioni superiori
-  static Future<PdfDocument> loadPdfDocument(String filePath) async {
+  static Future<app_doc.PdfDocument> loadPdfDocument(String filePath) async {
     try {
       final file = File(filePath);
       final stat = await file.stat();
@@ -26,8 +30,8 @@ class PdfService {
       // Calcolo ottimizzato del numero di pagine
       final pageCount = await _calculatePageCount(fileSize, filePath);
       
-      // Crea e restituisce il modello documento con tutte le proprietà
-      return PdfDocument(
+      // Crea e restituisce il documento PDF
+      return app_doc.PdfDocument(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         name: fileName,
         filePath: filePath,
@@ -67,7 +71,7 @@ class PdfService {
   
   /// Apre un documento PDF protetto da password con validazione
   /// Implementa gestione sicura e stima ottimizzata delle proprietà
-  static Future<PdfDocument> openPasswordProtectedPdf(
+  static Future<app_doc.PdfDocument> openPasswordProtectedPdf(
     String filePath, 
     String password
   ) async {
@@ -81,14 +85,14 @@ class PdfService {
       // Stima pagine ottimizzata per documenti protetti
       final pageCount = (fileSize / (3 * 1024)).ceil();
       
-      return PdfDocument(
+      return app_doc.PdfDocument(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         name: fileName,
         filePath: filePath,
         fileSize: fileSize,
         lastModified: lastModified,
         isPasswordProtected: true,
-        hasSearchableText: true, // Assume testo presente se possiamo aprirlo
+        hasSearchableText: true,
         pageCount: pageCount,
       );
     } catch (e) {
@@ -172,5 +176,242 @@ class PdfService {
     } catch (e) {
       return false;
     }
+  }
+  
+  /// Crea un nuovo PDF da zero con contenuto personalizzato
+  /// Basato sull'esempio dell'articolo con layout personalizzabile
+  static Future<String> createCustomPdf({
+    required String title,
+    required String companyName,
+    required List<Map<String, dynamic>> tableData,
+    required Map<String, String> vendorInfo,
+    required Map<String, String> shipToInfo,
+    Map<String, dynamic>? totals,
+  }) async {
+    try {
+      final pdf = pw.Document();
+      
+      // Stili di testo riutilizzabili
+      final titleStyle = pw.TextStyle(
+        fontSize: 40,
+        color: PdfColors.grey,
+        fontWeight: pw.FontWeight.bold,
+      );
+      
+      final headerStyle = pw.TextStyle(
+        color: PdfColors.grey800,
+        fontSize: 22,
+        fontWeight: pw.FontWeight.bold,
+      );
+      
+      final normalStyle = pw.TextStyle(
+        color: PdfColors.grey,
+        fontSize: 22,
+      );
+      
+      pdf.addPage(
+        pw.Page(
+          orientation: pw.PageOrientation.natural,
+          build: (pw.Context context) {
+            return pw.Column(
+              children: [
+                // Linea divisoria superiore
+                _divider(500),
+                pw.SizedBox(height: 5),
+                
+                // Titolo
+                pw.Text(
+                  title,
+                  style: titleStyle,
+                ),
+                pw.SizedBox(height: 5),
+                _divider(500),
+                pw.SizedBox(height: 60),
+                
+                // Nome azienda
+                pw.Row(
+                  children: [
+                    pw.Text(
+                      companyName,
+                      textAlign: pw.TextAlign.left,
+                      style: headerStyle,
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 30),
+                
+                // Informazioni vendor e ship to
+                _textRow(["Vendor:", "Ship To:"], headerStyle),
+                _textRow([vendorInfo["name"] ?? "", shipToInfo["name"] ?? ""], normalStyle),
+                _textRow([vendorInfo["address"] ?? "", shipToInfo["address"] ?? ""], normalStyle),
+                _textRow([vendorInfo["city"] ?? "", shipToInfo["city"] ?? ""], normalStyle),
+                _textRow([vendorInfo["phone"] ?? "", shipToInfo["phone"] ?? ""], normalStyle),
+                pw.SizedBox(height: 30),
+                
+                // Tabella prodotti
+                pw.Container(
+                  color: PdfColors.white,
+                  child: pw.Table(
+                    border: pw.TableBorder.all(color: PdfColors.black),
+                    children: [
+                      _tableRow(["No.", "Name", "Qty.", "Price", "Amount"], headerStyle),
+                      ...tableData.asMap().entries.map((entry) {
+                        final index = entry.key + 1;
+                        final item = entry.value;
+                        return _tableRow([
+                          index.toString(),
+                          item["name"] ?? "",
+                          item["quantity"]?.toString() ?? "",
+                          item["price"]?.toString() ?? "",
+                          item["amount"]?.toString() ?? "",
+                        ], normalStyle);
+                      }),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 30),
+                _divider(500),
+                pw.SizedBox(height: 30),
+                
+                // Totali
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.end,
+                  children: [
+                    pw.Container(
+                      width: 250,
+                      child: pw.Column(
+                        mainAxisAlignment: pw.MainAxisAlignment.end,
+                        children: [
+                          _textRow(["Sub Total", totals?["subtotal"]?.toString() ?? "0"], normalStyle),
+                          _textRow(["Discount", totals?["discount"]?.toString() ?? "0"], normalStyle),
+                          _divider(500),
+                          _textRow(["Grand Total", totals?["grandTotal"]?.toString() ?? "0"], normalStyle),
+                          _divider(500),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      );
+      
+      // Salva il PDF nella directory dei documenti
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName = 'custom_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final filePath = '${directory.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(await pdf.save());
+      
+      return filePath;
+    } catch (e) {
+      throw Exception('Impossibile creare il PDF personalizzato: $e');
+    }
+  }
+  
+  /// Crea un PDF semplice con testo centrato (Hello World)
+  /// Funzione base per test rapidi
+  static Future<String> createSimplePdf({String text = "Hello World!"}) async {
+    try {
+      final pdf = pw.Document();
+      
+      pdf.addPage(
+        pw.Page(
+          build: (pw.Context context) {
+            return pw.Center(
+              child: pw.Text(text),
+            );
+          },
+        ),
+      );
+      
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName = 'simple_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final filePath = '${directory.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(await pdf.save());
+      
+      return filePath;
+    } catch (e) {
+      throw Exception('Impossibile creare il PDF semplice: $e');
+    }
+  }
+  
+  /// Salva un PDF modificato con annotazioni
+  /// Combina il PDF originale con le modifiche
+  static Future<String> saveModifiedPdf({
+    required String originalPath,
+    required List<Map<String, dynamic>> annotations,
+    String? outputPath,
+  }) async {
+    try {
+      // Per ora, copia semplicemente il file originale
+      // In una implementazione completa, qui si applicherebbero le annotazioni
+      final originalFile = File(originalPath);
+      final originalBytes = await originalFile.readAsBytes();
+      
+      final directory = outputPath != null 
+          ? File(outputPath).parent 
+          : await getApplicationDocumentsDirectory();
+      
+      final fileName = outputPath != null 
+          ? File(outputPath).uri.pathSegments.last
+          : 'modified_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      
+      final filePath = outputPath ?? '${directory.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(originalBytes);
+      
+      // TODO: Implementare applicazione annotazioni quando disponibile
+      if (annotations.isNotEmpty) {
+        debugPrint('Attenzione: ${annotations.length} annotazioni non ancora applicate');
+      }
+      
+      return filePath;
+    } catch (e) {
+      throw Exception('Impossibile salvare il PDF modificato: $e');
+    }
+  }
+  
+  /// Helper per creare linee divisorie
+  static pw.Widget _divider(double width) {
+    return pw.Container(
+      height: 3,
+      width: width,
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey,
+      ),
+    );
+  }
+  
+  /// Helper per creare righe di tabella
+  static pw.TableRow _tableRow(List<String> attributes, pw.TextStyle textStyle) {
+    return pw.TableRow(
+      children: attributes
+          .map(
+            (e) => pw.Text(
+              "  $e",
+              style: textStyle,
+            ),
+          )
+          .toList(),
+    );
+  }
+  
+  /// Helper per creare righe di testo
+  static pw.Widget _textRow(List<String> titleList, pw.TextStyle textStyle) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: titleList
+          .map(
+            (e) => pw.Text(
+              e,
+              style: textStyle,
+            ),
+          )
+          .toList(),
+    );
   }
 }

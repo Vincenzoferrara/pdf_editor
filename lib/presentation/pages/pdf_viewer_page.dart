@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import '../widgets/pdf_viewer.dart';
 import '../widgets/warning_banner.dart';
-// import '../widgets/drawing_toolbar.dart'; // TODO: Riabilitare quando implementato
+import '../widgets/drawing_toolbar.dart';
+import '../widgets/drawing_canvas.dart';
+
 import '../providers/pdf_viewer_provider.dart';
+import '../providers/drawing_provider.dart';
 import '../../data/models/pdf_document.dart';
 
 class PdfViewerPage extends ConsumerStatefulWidget {
@@ -21,16 +24,32 @@ class PdfViewerPage extends ConsumerStatefulWidget {
 
 class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
   late final pdfrx.PdfViewerController _pdfController;
+  Matrix4? _savedViewMatrix;
 
   @override
   void initState() {
     super.initState();
     // Inizializza controller PDF con gestione ottimizzata del ciclo di vita
     _pdfController = pdfrx.PdfViewerController();
-    
+
     // Carica documento dopo il frame build per evitare blocchi UI
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(pdfViewerProvider.notifier).loadDocument(widget.document);
+    });
+
+    // Listener per preservare posizione quando cambia modalità
+    ref.listenManual(drawingModeProvider, (previous, next) {
+      if (_pdfController.isReady) {
+        // Salva la matrice corrente prima del cambio
+        _savedViewMatrix = _pdfController.value;
+
+        // Ripristina dopo il rebuild
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_savedViewMatrix != null && _pdfController.isReady) {
+            _pdfController.value = _savedViewMatrix!;
+          }
+        });
+      }
     });
   }
 
@@ -38,9 +57,8 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
   Widget build(BuildContext context) {
     // Watch providers ottimizzati - rebuild solo quando necessario
     final viewerState = ref.watch(pdfViewerProvider);
-    // TODO: Implementare drawingModeProvider quando disponibile
-    final isDrawingMode = false; // ref.watch(drawingModeProvider);
-    
+    final isDrawingMode = ref.watch(drawingModeProvider);
+
     return Scaffold(
       body: Stack(
         children: [
@@ -49,10 +67,21 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
             children: [
               // Barra superiore con informazioni documento e controlli
               _buildTopBar(context),
-              
+
+              // Toolbar per disegno
+              if (isDrawingMode)
+                const DrawingToolbar(),
+
               // Area contenuto PDF
               Expanded(
-                child: _buildPdfContentArea(context, viewerState),
+                child: Stack(
+                  children: [
+                    _buildPdfContentArea(context, viewerState),
+                    // Layer per disegno
+                    if (isDrawingMode)
+                      _buildDrawingLayer(context, viewerState),
+                  ],
+                ),
               ),
             ],
           ),
@@ -179,6 +208,19 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
     );
   }
 
+  /// Costruisce il layer per disegno
+  Widget _buildDrawingLayer(BuildContext context, PdfViewerState viewerState) {
+    if (viewerState.isLoading) return const SizedBox.shrink();
+    
+    return Positioned.fill(
+      top: !widget.document.hasSearchableText ? 60 : 0,
+      child: SimpleDrawingCanvas(
+        controller: _pdfController,
+        child: const SizedBox.shrink(),
+      ),
+    );
+  }
+
   /// Costruisce il visualizzatore PDF con gestione loading/error states
   Widget _buildPdfViewer(BuildContext context, PdfViewerState viewerState) {
     if (viewerState.isLoading) {
@@ -227,38 +269,21 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
 
   /// Costruisce i floating action buttons ottimizzati
   Widget _buildFloatingActions(BuildContext context, bool isDrawingMode) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Toggle modalità disegno
-        FloatingActionButton(
-          heroTag: "drawing",
-          onPressed: () {
-            // TODO: Implementare toggle modalità disegno
-          },
-          backgroundColor: isDrawingMode 
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surface,
-          child: Icon(
-            isDrawingMode ? Icons.close : Icons.edit,
-            color: isDrawingMode 
-                ? Theme.of(context).colorScheme.onPrimary
-                : Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-        // Navigazione pagine
-        FloatingActionButton(
-          heroTag: "navigation",
-          onPressed: _showPageNavigation,
-          child: const Icon(Icons.menu),
-        ),
-      ],
+    return FloatingActionButton(
+      onPressed: () {
+        ref.read(drawingModeProvider.notifier).state = !isDrawingMode;
+      },
+      backgroundColor: isDrawingMode
+          ? Theme.of(context).colorScheme.primary
+          : Theme.of(context).colorScheme.surface,
+      child: Icon(
+        isDrawingMode ? Icons.close : Icons.brush,
+        color: isDrawingMode
+            ? Theme.of(context).colorScheme.onPrimary
+            : Theme.of(context).colorScheme.onSurface,
+      ),
     );
   }
-              
-              
 
   /// Stampa il documento PDF utilizzando il servizio di stampa
   void _printPdf() {
@@ -320,16 +345,6 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
     );
   }
 
-  /// Mostra dialogo per inserimento password documenti protetti
-  void _showPasswordDialog() {
-    // TODO: Implementare dialogo password con validazione
-  }
-
-  /// Mostra navigazione rapida pagine con miniatura anteprime
-  void _showPageNavigation() {
-    // TODO: Implementare navigazione pagine con thumbnails
-  }
-
   /// Formatta dimensione file in formato leggibile ottimizzato
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
@@ -344,6 +359,11 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
     return '$day/$month/${date.year} $hour:$minute';
+  }
+
+  /// Mostra dialogo per inserimento password PDF
+  void _showPasswordDialog() {
+    // TODO: Implementare dialogo password
   }
 }
 

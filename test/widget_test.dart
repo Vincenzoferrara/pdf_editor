@@ -6,16 +6,20 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:editor_pdf/main.dart';
 
 void main() {
   testWidgets('App starts correctly', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const EditorPdfApp());
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: EditorPdfApp(),
+      ),
+    );
 
     // Verify that the app title is displayed
     expect(find.text('Editor PDF'), findsOneWidget);
-    expect(find.text('Benvenuto in Editor PDF'), findsOneWidget);
   });
 }

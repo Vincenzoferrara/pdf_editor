@@ -1,12 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
 import '../../data/models/pdf_document.dart' as app_doc;
 import '../providers/pdf_viewer_provider.dart';
+import '../providers/editing_objects_provider.dart';
+import 'editing_canvas.dart';
+
 
 /// Widget ottimizzato per la visualizzazione PDF con pdfrx
 /// Implementa caching, gesture handling ottimizzato e gestione memoria
-class PdfViewerWidget extends StatefulWidget {
+class PdfViewerWidget extends ConsumerStatefulWidget {
   final PdfViewerState state;
   final app_doc.PdfDocument document;
   final PdfViewerController? controller;
@@ -19,10 +23,10 @@ class PdfViewerWidget extends StatefulWidget {
   });
 
   @override
-  State<PdfViewerWidget> createState() => _PdfViewerWidgetState();
+  ConsumerState<PdfViewerWidget> createState() => _PdfViewerWidgetState();
 }
 
-class _PdfViewerWidgetState extends State<PdfViewerWidget> {
+class _PdfViewerWidgetState extends ConsumerState<PdfViewerWidget> {
   late final PdfViewerController _controller;
 
   @override
@@ -34,9 +38,7 @@ class _PdfViewerWidgetState extends State<PdfViewerWidget> {
 
   @override
   void dispose() {
-    // Pulizia risorse per prevenire memory leak
     // NOTA: PdfViewerController di pdfrx non ha metodo dispose
-    // _controller.dispose();
     super.dispose();
   }
 
@@ -48,7 +50,7 @@ class _PdfViewerWidgetState extends State<PdfViewerWidget> {
         child: CircularProgressIndicator(),
       );
     }
-    
+
     // Handle error state
     if (widget.state.error != null) {
       return Center(
@@ -104,67 +106,41 @@ class _PdfViewerWidgetState extends State<PdfViewerWidget> {
       );
     }
 
-    return RepaintBoundary(
-      child: Stack(
-        children: [
-          // Visualizzatore PDF ottimizzato per massime prestazioni
-          // Configurazione aggressiva per ridurre consumo memoria e migliorare rendering
-          PdfViewer.file(
-            file.path,
-            controller: _controller,
-            params: PdfViewerParams(
-              // Fisica di scrolling ottimizzata per separazione gesture
-              scrollPhysics: const FixedOverscrollPhysics(maxOverscroll: 50),
-              
-              // Limiti zoom ottimizzati per prestazioni e usabilità
-              minScale: 0.5,
-              maxScale: 3.0,
-              
-              // Configurazione gesture per prevenire conflitti
-              panEnabled: true,
-              scaleEnabled: true,
-              panAxis: PanAxis.free,
-              
-              // Ottimizzazione memoria e cache rendering
-              limitRenderingCache: true,
-              maxImageBytesCachedOnMemory: 50 * 1024 * 1024, // 50MB cache
-              
-              // Cache extents ottimizzati per scrolling più fluido
-              horizontalCacheExtent: 0.5,
-              verticalCacheExtent: 0.5,
-              
-              // Disabilita selezione testo per migliori prestazioni
-              textSelectionParams: const PdfTextSelectionParams(enabled: false),
-              
-              // Soglie rendering ottimizzate per rendering più rapido
-              onePassRenderingScaleThreshold: 150 / 72,
-              onePassRenderingSizeThreshold: 1500,
-              
-              // Riduci effetti visivi per prestazioni
-              pageDropShadow: null, // Rimuove ombre per performance
-              backgroundColor: Colors.grey,
-              margin: 4.0,
-              
-              // Disabilita rendering annotazioni per performance
-              annotationRenderingMode: PdfAnnotationRenderingMode.none,
-              
-              // Ottimizzazione interazione e gesture handling
-              interactionEndFrictionCoefficient: 0.8,
-              
-              // Configurazione mouse wheel per scrolling verticale
-              scrollByMouseWheel: 1.5,
-              scrollHorizontallyByMouseWheel: false,
-              
-              // Disabilita navigazione tastiera per performance
-              enableKeyboardNavigation: false,
-              
-              // Margini gesture per prevenire conflitti zoom
-              boundaryMargin: const EdgeInsets.all(100),
-            ),
-          ),
-        ],
+    // PDF base con nuovo sistema di editing objects
+    // Non facciamo watch di isActivelyDrawingProvider qui per evitare rebuild del PdfViewer
+    return EditingCanvas(
+      controller: _controller,
+      child: PdfViewer.file(
+        file.path,
+        key: ValueKey(widget.document.filePath),
+        controller: _controller,
+        params: PdfViewerParams(
+          scrollPhysics: const FixedOverscrollPhysics(maxOverscroll: 50),
+          minScale: 0.5,
+          maxScale: 3.0,
+          // Sempre abilitato - il controllo dei gesti lo fa EditingCanvas
+          panEnabled: true,
+          scaleEnabled: true,
+          panAxis: PanAxis.free,
+          limitRenderingCache: true,
+          maxImageBytesCachedOnMemory: 50 * 1024 * 1024,
+          horizontalCacheExtent: 0.5,
+          verticalCacheExtent: 0.5,
+          textSelectionParams: const PdfTextSelectionParams(enabled: true),
+          onePassRenderingScaleThreshold: 150 / 72,
+          onePassRenderingSizeThreshold: 1500,
+          pageDropShadow: null,
+          backgroundColor: Colors.grey,
+          margin: 4.0,
+          annotationRenderingMode: PdfAnnotationRenderingMode.none,
+          interactionEndFrictionCoefficient: 0.8,
+          scrollByMouseWheel: 1.5,
+          scrollHorizontallyByMouseWheel: false,
+          enableKeyboardNavigation: false,
+          boundaryMargin: const EdgeInsets.all(100),
+          // NO pagePaintCallbacks - le annotazioni le disegna EditingCanvas
+        ),
       ),
     );
   }
-
 }

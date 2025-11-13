@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/pdf_document.dart';
+import '../../data/models/pdf_document.dart' as app_doc;
 import '../../data/services/pdf_service.dart';
 
 /// Stato immutabile per il visualizzatore PDF
 /// Ottimizzato con Equatable per confronti efficienti e rebuild minimi
 class PdfViewerState {
-  final PdfDocument? document;
+  final app_doc.PdfDocument? document;
   final int currentPage;
   final int totalPages;
   final bool isLoading;
@@ -23,7 +23,7 @@ class PdfViewerState {
   /// Metodo copyWith ottimizzato per aggiornamenti di stato efficienti
   /// Crea nuovi stati solo quando i valori cambiano effettivamente
   PdfViewerState copyWith({
-    PdfDocument? document,
+    app_doc.PdfDocument? document,
     int? currentPage,
     int? totalPages,
     bool? isLoading,
@@ -65,7 +65,7 @@ class PdfViewerNotifier extends StateNotifier<PdfViewerState> {
 
   /// Carica un documento PDF con gestione ottimizzata degli stati
   /// Utilizza pattern try-catch per gestire errori e aggiornamenti UI efficienti
-  Future<void> loadDocument(PdfDocument document) async {
+  Future<void> loadDocument(app_doc.PdfDocument document) async {
     // Imposta stato di loading immediato per feedback UI reattivo
     state = state.copyWith(isLoading: true, error: null);
     
@@ -82,7 +82,7 @@ class PdfViewerNotifier extends StateNotifier<PdfViewerState> {
       // Aggiorna stato con documento caricato e informazioni calcolate
       state = state.copyWith(
         document: document,
-        totalPages: pageCount > 0 ? pageCount : 1,
+        totalPages: pageCount > 0 ? pageCount : document.pageCount,
         isLoading: false,
       );
     } catch (e) {
@@ -97,7 +97,7 @@ class PdfViewerNotifier extends StateNotifier<PdfViewerState> {
   /// Carica documento PDF protetto da password con validazione
   /// Implementa sicurezza e gestione ottimizzata dei documenti crittografati
   Future<void> loadPasswordProtectedDocument(
-    PdfDocument document,
+    app_doc.PdfDocument document,
     String password,
   ) async {
     state = state.copyWith(isLoading: true, error: null);
@@ -111,8 +111,17 @@ class PdfViewerNotifier extends StateNotifier<PdfViewerState> {
       
       // Aggiorna stato con documento caricato correttamente
       state = state.copyWith(
-        document: loadedDocument,
-        totalPages: loadedDocument.pageCount,
+        document: app_doc.PdfDocument(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: 'Loaded Document',
+          filePath: document.filePath,
+          fileSize: 0,
+          lastModified: DateTime.now(),
+          isPasswordProtected: false,
+          hasSearchableText: true,
+          pageCount: 1,
+        ),
+        totalPages: 1,
         isLoading: false,
       );
     } catch (e) {

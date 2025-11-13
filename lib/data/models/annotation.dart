@@ -49,6 +49,30 @@ class Annotation extends Equatable {
         createdAt,
         modifiedAt,
       ];
+      
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'documentId': documentId,
+      'pageNumber': pageNumber,
+      'type': type.name,
+      'data': data,
+      'createdAt': createdAt.toIso8601String(),
+      'modifiedAt': modifiedAt?.toIso8601String(),
+    };
+  }
+  
+  factory Annotation.fromJson(Map<String, dynamic> json) {
+    return Annotation(
+      id: json['id'],
+      documentId: json['documentId'],
+      pageNumber: json['pageNumber'],
+      type: AnnotationType.values.firstWhere((e) => e.name == json['type']),
+      data: Map<String, dynamic>.from(json['data']),
+      createdAt: DateTime.parse(json['createdAt']),
+      modifiedAt: json['modifiedAt'] != null ? DateTime.parse(json['modifiedAt']) : null,
+    );
+  }
 }
 
 enum AnnotationType {

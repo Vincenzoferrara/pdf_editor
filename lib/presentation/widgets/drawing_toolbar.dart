@@ -1,19 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-final drawingModeProvider = StateProvider<bool>((ref) => false);
-final selectedToolProvider = StateProvider<DrawingTool>((ref) => DrawingTool.pen);
-final selectedColorProvider = StateProvider<Color>((ref) => Colors.black);
-final strokeWidthProvider = StateProvider<double>((ref) => 2.0);
-
-enum DrawingTool {
-  pen,
-  highlighter,
-  eraser,
-  text,
-  signature,
-  shape,
-}
+import 'drawing_canvas.dart';
+import '../providers/drawing_provider.dart';
 
 class DrawingToolbar extends ConsumerWidget {
   const DrawingToolbar({super.key});
@@ -23,33 +11,45 @@ class DrawingToolbar extends ConsumerWidget {
     final selectedTool = ref.watch(selectedToolProvider);
     final selectedColor = ref.watch(selectedColorProvider);
     final strokeWidth = ref.watch(strokeWidthProvider);
-    
+    final strokes = ref.watch(drawingStrokesProvider);
+
     return Container(
+      height: 72,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 8,
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
           // Drawing tools
           _buildToolSelector(context, ref, selectedTool),
-          
-          const Divider(height: 1),
-          
+
+          const VerticalDivider(width: 1),
+
           // Color picker and stroke width
-          if (selectedTool == DrawingTool.pen || 
-              selectedTool == DrawingTool.highlighter ||
-              selectedTool == DrawingTool.text ||
-              selectedTool == DrawingTool.signature)
-            _buildColorAndStrokeControls(context, ref, selectedColor, strokeWidth),
+          if (selectedTool == DrawingTool.pen ||
+              selectedTool == DrawingTool.highlighter)
+            Expanded(
+              child: _buildColorAndStrokeControls(
+                  context, ref, selectedColor, strokeWidth),
+            ),
+
+          const VerticalDivider(width: 1),
+
+          // Undo and Clear All buttons
+          _buildActionButtons(context, ref, strokes),
         ],
       ),
     );
@@ -96,22 +96,6 @@ class DrawingToolbar extends ConsumerWidget {
             icon: Icons.text_fields,
             isSelected: selectedTool == DrawingTool.text,
             tooltip: 'Testo',
-          ),
-          _buildToolButton(
-            context: context,
-            ref: ref,
-            tool: DrawingTool.signature,
-            icon: Icons.draw,
-            isSelected: selectedTool == DrawingTool.signature,
-            tooltip: 'Firma',
-          ),
-          _buildToolButton(
-            context: context,
-            ref: ref,
-            tool: DrawingTool.shape,
-            icon: Icons.shape_line,
-            isSelected: selectedTool == DrawingTool.shape,
-            tooltip: 'Forme',
           ),
         ],
       ),
@@ -160,93 +144,86 @@ class DrawingToolbar extends ConsumerWidget {
   ) {
     final colors = [
       Colors.black,
-      Colors.white,
       Colors.red,
-      Colors.green,
       Colors.blue,
+      Colors.green,
       Colors.yellow,
-      Colors.purple,
       Colors.orange,
-      Colors.brown,
-      Colors.grey,
+      Colors.purple,
+      Colors.pink,
     ];
-    
+
     return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Row(
         children: [
-          // Color palette
+          // Color palette orizzontale
+          ...colors.map((color) {
+            final isSelected =
+                selectedColor.withValues(alpha: 1) == color.withValues(alpha: 1);
+
+            return GestureDetector(
+              onTap: () {
+                ref.read(selectedColorProvider.notifier).state = color;
+              },
+              child: Container(
+                width: 32,
+                height: 32,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: isSelected
+                      ? Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 3,
+                        )
+                      : Border.all(
+                          color: Colors.grey.shade300,
+                          width: 1,
+                        ),
+                ),
+                child: isSelected
+                    ? Icon(
+                        Icons.check,
+                        color: _getContrastColor(color),
+                        size: 16,
+                      )
+                    : null,
+              ),
+            );
+          }),
+
+          const SizedBox(width: 16),
+
+          // Stroke width slider compatto
+          Icon(
+            Icons.line_weight,
+            size: 20,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
           SizedBox(
-            height: 40,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: colors.length,
-              itemBuilder: (context, index) {
-                final color = colors[index];
-                final isSelected = selectedColor.withValues(alpha: 1) == color.withValues(alpha: 1);
-                
-                return GestureDetector(
-                  onTap: () {
-                    ref.read(selectedColorProvider.notifier).state = color;
-                  },
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: isSelected 
-                          ? Border.all(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 3,
-                            )
-                          : null,
-                    ),
-                    child: isSelected
-                        ? Icon(
-                            Icons.check,
-                            color: _getContrastColor(color),
-                            size: 16,
-                          )
-                        : null,
-                  ),
-                );
+            width: 150,
+            child: Slider(
+              value: strokeWidth,
+              min: 0.5,
+              max: 20.0,
+              divisions: 39,
+              onChanged: (value) {
+                ref.read(strokeWidthProvider.notifier).state = value;
               },
             ),
           ),
-          
-          const SizedBox(height: 8),
-          
-          // Stroke width slider
-          Row(
-            children: [
-              Icon(
-                Icons.brush,
-                size: 20,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Slider(
-                  value: strokeWidth,
-                  min: 0.5,
-                  max: 20.0,
-                  divisions: 39,
-                  onChanged: (value) {
-                    ref.read(strokeWidthProvider.notifier).state = value;
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 32,
-                child: Text(
-                  strokeWidth.toStringAsFixed(1),
-                  style: Theme.of(context).textTheme.bodySmall,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
+          SizedBox(
+            width: 32,
+            child: Text(
+              strokeWidth.toStringAsFixed(1),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       ),
@@ -257,5 +234,81 @@ class DrawingToolbar extends ConsumerWidget {
     // Calculate luminance to determine if we should use black or white text
     final luminance = color.computeLuminance();
     return luminance > 0.5 ? Colors.black : Colors.white;
+  }
+
+  Widget _buildActionButtons(
+    BuildContext context,
+    WidgetRef ref,
+    List<DrawingStroke> strokes,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Undo button
+          Tooltip(
+            message: 'Annulla ultimo tratto',
+            child: IconButton(
+              onPressed: strokes.isEmpty
+                  ? null
+                  : () {
+                      final currentStrokes = ref.read(drawingStrokesProvider);
+                      if (currentStrokes.isEmpty) return;
+
+                      // Rimuovi l'ultimo tratto
+                      ref.read(drawingStrokesProvider.notifier).state =
+                          currentStrokes.sublist(0, currentStrokes.length - 1);
+                    },
+              icon: const Icon(Icons.undo),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(40, 40),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Clear all button
+          Tooltip(
+            message: 'Cancella tutto',
+            child: IconButton(
+              onPressed: strokes.isEmpty
+                  ? null
+                  : () {
+                      // Mostra dialogo di conferma
+                      showDialog(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: const Text('Cancella tutto'),
+                          content: const Text(
+                            'Sei sicuro di voler cancellare tutte le annotazioni?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              child: const Text('Annulla'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                ref.read(drawingStrokesProvider.notifier).state = [];
+                                Navigator.of(dialogContext).pop();
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Theme.of(context).colorScheme.error,
+                              ),
+                              child: const Text('Cancella'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+              icon: const Icon(Icons.delete_outline),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(40, 40),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
