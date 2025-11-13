@@ -363,12 +363,31 @@ class _SelectionGestureLayer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
+    return Listener(
       behavior: HitTestBehavior.translucent,
-      onTapUp: (details) => _handleTapUp(details, context, ref),
-      onPanStart: (details) => _handlePanStart(details, ref),
-      onPanUpdate: (details) => _handlePanUpdate(details, ref),
-      onPanEnd: (details) => _handlePanEnd(ref),
+      onPointerDown: (event) {
+        // Intercetta il pointer down per priority handling
+        final pageInfo = converter.screenToPage(event.localPosition);
+        if (pageInfo != null) {
+          final objects = ref.read(editingObjectsProvider);
+
+          // Check if tapping on an existing object
+          for (int i = objects.length - 1; i >= 0; i--) {
+            final obj = objects[i];
+            if (obj.pageNumber == pageInfo.pageNumber && obj.hitTest(pageInfo.pagePoint)) {
+              // Will handle this tap, prevent PDF from scrolling
+              return;
+            }
+          }
+        }
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTapUp: (details) => _handleTapUp(details, context, ref),
+        onPanStart: (details) => _handlePanStart(details, ref),
+        onPanUpdate: (details) => _handlePanUpdate(details, ref),
+        onPanEnd: (details) => _handlePanEnd(ref),
+      ),
     );
   }
 

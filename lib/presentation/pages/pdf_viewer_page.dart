@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import '../widgets/pdf_viewer.dart';
 import '../widgets/warning_banner.dart';
@@ -160,6 +161,16 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
             ],
           ),
         ),
+        const PopupMenuItem(
+          value: 'settings',
+          child: Row(
+            children: [
+              Icon(Icons.settings_outlined),
+              SizedBox(width: 8),
+              Text('Impostazioni'),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -175,6 +186,9 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
         break;
       case 'info':
         _showDocumentInfo();
+        break;
+      case 'settings':
+        context.push('/settings');
         break;
     }
   }
