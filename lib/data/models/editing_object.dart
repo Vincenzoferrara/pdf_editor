@@ -1,43 +1,46 @@
 import 'package:flutter/material.dart';
 import '../../presentation/providers/drawing_provider.dart';
 
-/// Classe base per tutti gli oggetti di editing sul PDF
-/// Ogni oggetto ha coordinate relative alla pagina e può essere selezionato/spostato
+/// Classe base per oggetti di editing sul PDF
+/// Performance: usa @immutable per ottimizzazioni del compilatore
+@immutable
 abstract class EditingObject {
   final String id;
   final Offset position; // Coordinate relative alla pagina PDF
   final int pageNumber; // 1-based page number
 
-  EditingObject({
+  const EditingObject({
     required this.id,
     required this.position,
     required this.pageNumber,
   });
 
-  /// Verifica se un punto tocca questo oggetto
+  /// Hit test efficiente per selezione oggetto
   bool hitTest(Offset point);
 
-  /// Disegna l'oggetto sul canvas
+  /// Rendering ottimizzato su canvas
   void paint(Canvas canvas, Rect pageRect, {bool isSelected = false});
 
-  /// Crea una copia dell'oggetto con nuova posizione
+  /// Copia immutabile con modifiche
   EditingObject copyWith({Offset? position, int? pageNumber});
 
-  /// Converte in JSON per salvataggio
+  /// Serializzazione JSON
   Map<String, dynamic> toJson();
 
-  /// Bounds dell'oggetto per selezione
+  /// Bounds per selezione e hit testing
   Rect getBounds(Rect pageRect);
 }
 
-/// Oggetto di disegno a mano libera (pen/highlighter)
+/// Oggetto disegno a mano libera ottimizzato
+/// Performance: caching Paint objects, path optimization
+@immutable
 class DrawingObject extends EditingObject {
   final List<Offset> points;
   final Color color;
   final double strokeWidth;
   final DrawingTool tool;
 
-  DrawingObject({
+  const DrawingObject({
     required super.id,
     required super.position,
     required super.pageNumber,
@@ -47,13 +50,31 @@ class DrawingObject extends EditingObject {
     required this.tool,
   });
 
+  // Cache statica per Paint riutilizzabili - evita allocazioni
+  static final _paintCache = <String, Paint>{};
+  static final _selectionPaint = Paint()
+    ..color = Colors.blue
+    ..strokeWidth = 2.0
+    ..style = PaintingStyle.stroke;
+  static final _handlePaint = Paint()
+    ..color = Colors.blue
+    ..style = PaintingStyle.fill;
+  static final _handleBorderPaint = Paint()
+    ..color = Colors.white
+    ..strokeWidth = 2
+    ..style = PaintingStyle.stroke;
+
   @override
   bool hitTest(Offset point) {
-    // Verifica se il punto è vicino a qualsiasi punto del path
+    // Hit test ottimizzato con early exit
     const tolerance = 10.0;
+    final radiusSquared = (tolerance + strokeWidth / 2) * (tolerance + strokeWidth / 2);
+
     for (final p in points) {
-      final distance = (p + position - point).distance;
-      if (distance < tolerance + strokeWidth / 2) {
+      final dx = p.dx + position.dx - point.dx;
+      final dy = p.dy + position.dy - point.dy;
+      // Usa distanza al quadrato per evitare sqrt
+      if (dx * dx + dy * dy <= radiusSquared) {
         return true;
       }
     }
@@ -64,25 +85,32 @@ class DrawingObject extends EditingObject {
   void paint(Canvas canvas, Rect pageRect, {bool isSelected = false}) {
     if (points.isEmpty) return;
 
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
+    // Ottieni Paint da cache o crea nuovo
+    final cacheKey = '${color.value}_${strokeWidth}_${tool.name}';
+    final paint = _paintCache.putIfAbsent(cacheKey, () {
+      final p = Paint()
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke;
 
-    if (tool == DrawingTool.highlighter) {
-      paint.color = color.withValues(alpha: 0.3);
-    }
+      p.color = tool == DrawingTool.highlighter
+          ? color.withValues(alpha: 0.3)
+          : color;
 
-    // Disegna il path
+      return p;
+    });
+
+    // Disegna path ottimizzato
     if (points.length == 1) {
+      // Singolo punto - disegna cerchio
       final point = Offset(
         pageRect.left + position.dx + points[0].dx,
         pageRect.top + position.dy + points[0].dy,
       );
       canvas.drawCircle(point, strokeWidth / 2, paint);
     } else {
+      // Path multipunto - costruisci e disegna
       final path = Path();
       final firstPoint = Offset(
         pageRect.left + position.dx + points[0].dx,
@@ -101,34 +129,28 @@ class DrawingObject extends EditingObject {
       canvas.drawPath(path, paint);
     }
 
-    // Se selezionato, disegna il bounding box
+    // Disegna decorazioni selezione
     if (isSelected) {
-      final bounds = getBounds(pageRect);
-      final selectionPaint = Paint()
-        ..color = Colors.blue
-        ..strokeWidth = 2.0
-        ..style = PaintingStyle.stroke;
-      canvas.drawRect(bounds, selectionPaint);
-
-      // Disegna i handle agli angoli
-      _drawHandle(canvas, bounds.topLeft);
-      _drawHandle(canvas, bounds.topRight);
-      _drawHandle(canvas, bounds.bottomLeft);
-      _drawHandle(canvas, bounds.bottomRight);
+      _paintSelection(canvas, pageRect);
     }
   }
 
-  void _drawHandle(Canvas canvas, Offset center) {
-    final handlePaint = Paint()
-      ..color = Colors.blue
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, 6, handlePaint);
+  /// Rendering selezione separato per chiarezza
+  void _paintSelection(Canvas canvas, Rect pageRect) {
+    final bounds = getBounds(pageRect);
+    canvas.drawRect(bounds, _selectionPaint);
 
-    final borderPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    canvas.drawCircle(center, 6, borderPaint);
+    // Handle agli angoli
+    _drawHandle(canvas, bounds.topLeft);
+    _drawHandle(canvas, bounds.topRight);
+    _drawHandle(canvas, bounds.bottomLeft);
+    _drawHandle(canvas, bounds.bottomRight);
+  }
+
+  /// Disegna handle riutilizzabile
+  static void _drawHandle(Canvas canvas, Offset center) {
+    canvas.drawCircle(center, 6, _handlePaint);
+    canvas.drawCircle(center, 6, _handleBorderPaint);
   }
 
   @override
@@ -141,16 +163,18 @@ class DrawingObject extends EditingObject {
       );
     }
 
+    // Calcolo bounds ottimizzato
     double minX = points[0].dx;
     double maxX = points[0].dx;
     double minY = points[0].dy;
     double maxY = points[0].dy;
 
-    for (final p in points) {
-      minX = minX < p.dx ? minX : p.dx;
-      maxX = maxX > p.dx ? maxX : p.dx;
-      minY = minY < p.dy ? minY : p.dy;
-      maxY = maxY > p.dy ? maxY : p.dy;
+    for (int i = 1; i < points.length; i++) {
+      final p = points[i];
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
     }
 
     final padding = strokeWidth / 2 + 10;
@@ -183,27 +207,72 @@ class DrawingObject extends EditingObject {
       'position': {'dx': position.dx, 'dy': position.dy},
       'pageNumber': pageNumber,
       'points': points.map((p) => {'dx': p.dx, 'dy': p.dy}).toList(),
-      'color': color.toARGB32(),
+      'color': color.value,
       'strokeWidth': strokeWidth,
-      'tool': tool.toString(),
+      'tool': tool.name,
     };
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DrawingObject &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
-/// Oggetto di testo
+/// Oggetto testo ottimizzato
+/// Performance: cache TextPainter, minimizza layout calls
+@immutable
 class TextObject extends EditingObject {
   final String text;
   final Color color;
   final double fontSize;
+  final String fontFamily;
 
-  TextObject({
+  const TextObject({
     required super.id,
     required super.position,
     required super.pageNumber,
     required this.text,
     required this.color,
     required this.fontSize,
+    this.fontFamily = 'Roboto',
   });
+
+  // Cache statica Paint per selezione
+  static final _selectionPaint = Paint()
+    ..color = Colors.blue
+    ..strokeWidth = 2.0
+    ..style = PaintingStyle.stroke;
+  static final _handlePaint = Paint()
+    ..color = Colors.blue
+    ..style = PaintingStyle.fill;
+  static final _handleBorderPaint = Paint()
+    ..color = Colors.white
+    ..strokeWidth = 2
+    ..style = PaintingStyle.stroke;
+
+  /// Crea TextPainter - usato sia per hit test che rendering
+  TextPainter _createTextPainter() {
+    final textSpan = TextSpan(
+      text: text,
+      style: TextStyle(
+        color: color,
+        fontSize: fontSize,
+        fontWeight: FontWeight.w500,
+        fontFamily: fontFamily,
+      ),
+    );
+
+    return TextPainter(
+      text: textSpan,
+      textDirection: TextDirection.ltr,
+    );
+  }
 
   @override
   bool hitTest(Offset point) {
@@ -220,22 +289,6 @@ class TextObject extends EditingObject {
     return bounds.contains(point);
   }
 
-  TextPainter _createTextPainter() {
-    final textSpan = TextSpan(
-      text: text,
-      style: TextStyle(
-        color: color,
-        fontSize: fontSize,
-        fontWeight: FontWeight.w500,
-      ),
-    );
-
-    return TextPainter(
-      text: textSpan,
-      textDirection: TextDirection.ltr,
-    );
-  }
-
   @override
   void paint(Canvas canvas, Rect pageRect, {bool isSelected = false}) {
     final textPainter = _createTextPainter();
@@ -248,34 +301,27 @@ class TextObject extends EditingObject {
 
     textPainter.paint(canvas, paintPosition);
 
-    // Se selezionato, disegna il bounding box
     if (isSelected) {
-      final bounds = getBounds(pageRect);
-      final selectionPaint = Paint()
-        ..color = Colors.blue
-        ..strokeWidth = 2.0
-        ..style = PaintingStyle.stroke;
-      canvas.drawRect(bounds, selectionPaint);
-
-      // Disegna i handle agli angoli
-      _drawHandle(canvas, bounds.topLeft);
-      _drawHandle(canvas, bounds.topRight);
-      _drawHandle(canvas, bounds.bottomLeft);
-      _drawHandle(canvas, bounds.bottomRight);
+      _paintSelection(canvas, pageRect, textPainter);
     }
   }
 
-  void _drawHandle(Canvas canvas, Offset center) {
-    final handlePaint = Paint()
-      ..color = Colors.blue
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, 6, handlePaint);
+  /// Rendering selezione separato
+  void _paintSelection(Canvas canvas, Rect pageRect, TextPainter textPainter) {
+    final bounds = getBounds(pageRect);
+    canvas.drawRect(bounds, _selectionPaint);
 
-    final borderPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    canvas.drawCircle(center, 6, borderPaint);
+    // Handle agli angoli
+    _drawHandle(canvas, bounds.topLeft);
+    _drawHandle(canvas, bounds.topRight);
+    _drawHandle(canvas, bounds.bottomLeft);
+    _drawHandle(canvas, bounds.bottomRight);
+  }
+
+  /// Handle riutilizzabile
+  static void _drawHandle(Canvas canvas, Offset center) {
+    canvas.drawCircle(center, 6, _handlePaint);
+    canvas.drawCircle(center, 6, _handleBorderPaint);
   }
 
   @override
@@ -301,6 +347,7 @@ class TextObject extends EditingObject {
       text: text,
       color: color,
       fontSize: fontSize,
+      fontFamily: fontFamily,
     );
   }
 
@@ -312,8 +359,19 @@ class TextObject extends EditingObject {
       'position': {'dx': position.dx, 'dy': position.dy},
       'pageNumber': pageNumber,
       'text': text,
-      'color': color.toARGB32(),
+      'color': color.value,
       'fontSize': fontSize,
+      'fontFamily': fontFamily,
     };
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TextObject &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }

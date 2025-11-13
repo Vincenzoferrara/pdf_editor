@@ -1,23 +1,18 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ThemeMode;
+import 'package:flutter/material.dart' as material show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
-import '../core/theme/app_theme.dart';
-import '../core/theme/theme_provider.dart';
-import '../presentation/providers/router_provider.dart';
+import 'theme/app_theme.dart';
+import 'theme/theme_provider.dart';
+import 'presentation/providers/router_provider.dart';
 
-/// Punto di ingresso principale dell'applicazione PDF Editor
-/// Ottimizzato per prestazioni con inizializzazione controllata
+/// Punto di ingresso principale - Editor PDF ottimizzato
 void main() async {
-  // Garantisce che i binding di Flutter siano completamente inizializzati
-  // prima di eseguire qualsiasi operazione asincrona
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inizializza la libreria pdfrx per il supporto PDF multipiattaforma
-  // Essenziale per il rendering ottimizzato dei documenti PDF
+
+  // Inizializza pdfrx per rendering PDF
   pdfrxFlutterInitialize();
-  
-  // Avvia l'app con ProviderScope per la gestione dello stato globale
-  // Riverpod offre prestazioni superiori e gestione dello stato reattiva
+
   runApp(
     const ProviderScope(
       child: EditorPdfApp(),
@@ -25,33 +20,46 @@ void main() async {
   );
 }
 
-/// Widget principale dell'applicazione che gestisce tema e routing
-/// Utilizza ConsumerWidget per ottimizzare i rebuild solo quando necessario
+/// App principale con tema dinamico
 class EditorPdfApp extends ConsumerWidget {
   const EditorPdfApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch del provider del tema - rebuild solo quando il tema cambia
-    final themeMode = ref.watch(themeProvider);
-    
-    // Watch del router - rebuild solo quando la configurazione del routing cambia
+    final themeState = ref.watch(themeProvider);
     final router = ref.watch(routerProvider);
-    
-    // Costruzione dell'app con supporto per colori dinamici (Material You)
-    return AppTheme.buildWithTheme(
-      builder: (lightTheme, darkTheme) {
-        return MaterialApp.router(
-          title: 'Editor PDF',
-          // Disabilita il banner di debug per prestazioni migliori in produzione
-          debugShowCheckedModeBanner: false,
-          theme: lightTheme,
-          darkTheme: darkTheme,
-          themeMode: themeMode,
-          // Configurazione del routing con GoRouter per navigazione ottimizzata
-          routerConfig: router,
-        );
-      },
+
+    // Ottieni tema Flutter in base alla modalità selezionata
+    final flutterThemeMode = _getFlutterThemeMode(
+      themeState.themeMode,
+      context,
     );
+
+    return MaterialApp.router(
+      title: 'Editor PDF',
+      debugShowCheckedModeBanner: false,
+
+      // Temi con colore primario personalizzabile
+      theme: AppTheme.lightTheme(themeState.primaryColor),
+      darkTheme: AppTheme.darkTheme(themeState.primaryColor),
+      themeMode: flutterThemeMode,
+
+      routerConfig: router,
+    );
+  }
+
+  /// Converti ThemeMode custom a ThemeMode Flutter
+  material.ThemeMode _getFlutterThemeMode(
+    ThemeMode mode,
+    BuildContext context,
+  ) {
+    switch (mode) {
+      case ThemeMode.light:
+        return material.ThemeMode.light;
+      case ThemeMode.dark:
+        return material.ThemeMode.dark;
+      case ThemeMode.system:
+        return material.ThemeMode.system;
+    }
   }
 }

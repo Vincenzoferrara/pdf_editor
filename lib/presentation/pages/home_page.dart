@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import 'package:go_router/go_router.dart';
 import '../widgets/floating_action_button.dart';
 import '../widgets/custom_window_controls.dart';
 import '../widgets/bottom_navigation.dart';
@@ -27,7 +28,7 @@ class HomePage extends ConsumerWidget {
       return _buildDesktopLayout();
     } else {
       // Layout mobile con AppBar standard
-      return _buildMobileLayout(ref);
+      return _buildMobileLayout(context);
     }
   }
 
@@ -60,18 +61,16 @@ class HomePage extends ConsumerWidget {
   }
 
   /// Costruisce il layout specifico per mobile con AppBar
-  Widget _buildMobileLayout(WidgetRef ref) {
+  Widget _buildMobileLayout(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Editor PDF'),
         actions: [
-          // Pulsante toggle tema con ottimizzazione rebuild
+          // Pulsante impostazioni
           IconButton(
-            icon: const Icon(Icons.brightness_6),
-            onPressed: () {
-              // Usa read invece di watch per evitare rebuild non necessari
-              ref.read(themeProvider.notifier).toggleTheme();
-            },
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.push('/settings'),
+            tooltip: 'Impostazioni',
           ),
         ],
       ),

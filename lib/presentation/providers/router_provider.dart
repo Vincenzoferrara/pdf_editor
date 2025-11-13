@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../pages/home_page.dart';
 import '../pages/pdf_viewer_page.dart';
+import '../pages/settings/settings_page.dart';
 import '../../data/models/pdf_document.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -26,6 +27,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           }
           return PdfViewerPage(document: document);
         },
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsPage(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

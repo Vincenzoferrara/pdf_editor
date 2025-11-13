@@ -4,7 +4,7 @@ import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import '../widgets/pdf_viewer.dart';
 import '../widgets/warning_banner.dart';
 import '../widgets/drawing_toolbar.dart';
-import '../widgets/drawing_canvas.dart';
+import '../widgets/editing_canvas.dart';
 
 import '../providers/pdf_viewer_provider.dart';
 import '../providers/drawing_provider.dart';
@@ -74,14 +74,7 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
 
               // Area contenuto PDF
               Expanded(
-                child: Stack(
-                  children: [
-                    _buildPdfContentArea(context, viewerState),
-                    // Layer per disegno
-                    if (isDrawingMode)
-                      _buildDrawingLayer(context, viewerState),
-                  ],
-                ),
+                child: _buildPdfContentArea(context, viewerState),
               ),
             ],
           ),
@@ -205,19 +198,6 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
           child: _buildPdfViewer(context, viewerState),
         ),
       ],
-    );
-  }
-
-  /// Costruisce il layer per disegno
-  Widget _buildDrawingLayer(BuildContext context, PdfViewerState viewerState) {
-    if (viewerState.isLoading) return const SizedBox.shrink();
-    
-    return Positioned.fill(
-      top: !widget.document.hasSearchableText ? 60 : 0,
-      child: SimpleDrawingCanvas(
-        controller: _pdfController,
-        child: const SizedBox.shrink(),
-      ),
     );
   }
 
