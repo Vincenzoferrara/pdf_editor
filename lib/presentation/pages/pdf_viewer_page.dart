@@ -5,11 +5,11 @@ import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import '../widgets/pdf_viewer.dart';
 import '../widgets/warning_banner.dart';
 import '../widgets/drawing_toolbar.dart';
-import '../widgets/editing_canvas.dart';
 
 import '../providers/pdf_viewer_provider.dart';
 import '../providers/drawing_provider.dart';
 import '../../data/models/pdf_document.dart';
+import '../../data/services/pdf_manipulation_service.dart';
 
 class PdfViewerPage extends ConsumerStatefulWidget {
   final PdfDocument document;
@@ -171,6 +171,78 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
             ],
           ),
         ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'rotate',
+          child: Row(
+            children: [
+              Icon(Icons.rotate_90_degrees_cw),
+              SizedBox(width: 8),
+              Text('Ruota pagina'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'merge',
+          child: Row(
+            children: [
+              Icon(Icons.merge_type),
+              SizedBox(width: 8),
+              Text('Unisci PDF'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'reorder',
+          child: Row(
+            children: [
+              Icon(Icons.reorder),
+              SizedBox(width: 8),
+              Text('Riordina pagine'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'extract',
+          child: Row(
+            children: [
+              Icon(Icons.content_cut),
+              SizedBox(width: 8),
+              Text('Estrai pagine'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'delete_pages',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline),
+              SizedBox(width: 8),
+              Text('Elimina pagine'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'add_image',
+          child: Row(
+            children: [
+              Icon(Icons.image),
+              SizedBox(width: 8),
+              Text('Aggiungi immagine'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'add_link',
+          child: Row(
+            children: [
+              Icon(Icons.link),
+              SizedBox(width: 8),
+              Text('Aggiungi link'),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -189,6 +261,27 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
         break;
       case 'settings':
         context.push('/settings');
+        break;
+      case 'rotate':
+        _rotatePage();
+        break;
+      case 'merge':
+        _mergePdf();
+        break;
+      case 'reorder':
+        _reorderPages();
+        break;
+      case 'extract':
+        _extractPages();
+        break;
+      case 'delete_pages':
+        _deletePages();
+        break;
+      case 'add_image':
+        _addImage();
+        break;
+      case 'add_link':
+        _addLink();
         break;
     }
   }
@@ -358,6 +451,451 @@ class _PdfViewerPageState extends ConsumerState<PdfViewerPage> {
   /// Mostra dialogo per inserimento password PDF
   void _showPasswordDialog() {
     // TODO: Implementare dialogo password
+  }
+
+  /// Ruota la pagina corrente di 90 gradi
+  void _rotatePage() async {
+    // Ottieni pagina corrente dal controller
+    int currentPage = 0;
+    if (_pdfController.isReady) {
+      // pdfrx non ha un metodo diretto per ottenere la pagina corrente
+      // Useremo la prima pagina come default
+      currentPage = 0;
+    }
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ruota pagina'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Ruota la pagina ${currentPage + 1}'),
+            const SizedBox(height: 16),
+            const Text('Seleziona l\'angolo di rotazione:'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annulla'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 90),
+            child: const Text('90° →'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 180),
+            child: const Text('180° ↓'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 270),
+            child: const Text('270° ←'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      _performRotation(currentPage, result);
+    }
+  }
+
+  Future<void> _performRotation(int pageIndex, int angle) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final outputPath = await PdfManipulationService.rotatePage(
+        filePath: widget.document.filePath,
+        pageIndex: pageIndex,
+        rotationAngle: angle,
+      );
+
+      if (mounted) {
+        Navigator.pop(context); // Chiudi loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pagina ruotata! Salvato in: $outputPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Chiudi loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Unisci un altro PDF con questo
+  void _mergePdf() async {
+    try {
+      final selectedFiles = await PdfManipulationService.pickPdfsToMerge();
+
+      if (selectedFiles == null || selectedFiles.isEmpty) {
+        return;
+      }
+
+      // Aggiungi il PDF corrente all'inizio della lista
+      final filesToMerge = [widget.document.filePath, ...selectedFiles];
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      final outputPath = await PdfManipulationService.mergePdfs(
+        filePaths: filesToMerge,
+      );
+
+      if (mounted) {
+        Navigator.pop(context); // Chiudi loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF uniti! Salvato in: $outputPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Chiudi loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Riordina le pagine del PDF
+  void _reorderPages() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Usa Estrai o Elimina pagine per riorganizzare'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// Estrai pagine selezionate in un nuovo PDF
+  void _extractPages() async {
+    final TextEditingController controller = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Estrai pagine'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Documento ha ${widget.document.pageCount} pagine'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Pagine da estrarre',
+                hintText: 'es: 1,3,5-7',
+                helperText: 'Usa virgole e trattini',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annulla'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Estrai'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty && mounted) {
+      _performExtraction(result);
+    }
+  }
+
+  Future<void> _performExtraction(String pagesString) async {
+    try {
+      final List<int> pageIndices = _parsePageNumbers(pagesString);
+
+      if (pageIndices.isEmpty) {
+        throw Exception('Nessuna pagina valida specificata');
+      }
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final outputPath = await PdfManipulationService.extractPages(
+        filePath: widget.document.filePath,
+        pageIndices: pageIndices,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pagine estratte! Salvato in: $outputPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Elimina pagine selezionate
+  void _deletePages() async {
+    final TextEditingController controller = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Elimina pagine'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Documento ha ${widget.document.pageCount} pagine'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Pagine da eliminare',
+                hintText: 'es: 2,4,6-8',
+                helperText: 'Usa virgole e trattini',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annulla'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty && mounted) {
+      _performDeletion(result);
+    }
+  }
+
+  Future<void> _performDeletion(String pagesString) async {
+    try {
+      final List<int> pageIndices = _parsePageNumbers(pagesString);
+
+      if (pageIndices.isEmpty) {
+        throw Exception('Nessuna pagina valida specificata');
+      }
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final outputPath = await PdfManipulationService.deletePages(
+        filePath: widget.document.filePath,
+        pageIndices: pageIndices,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pagine eliminate! Salvato in: $outputPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Parse page numbers from string like "1,3,5-7"
+  List<int> _parsePageNumbers(String input) {
+    final List<int> pages = [];
+    final parts = input.split(',');
+
+    for (final part in parts) {
+      final trimmed = part.trim();
+      if (trimmed.contains('-')) {
+        final range = trimmed.split('-');
+        if (range.length == 2) {
+          final start = int.tryParse(range[0].trim());
+          final end = int.tryParse(range[1].trim());
+          if (start != null && end != null) {
+            for (int i = start; i <= end; i++) {
+              if (i > 0 && i <= widget.document.pageCount) {
+                pages.add(i - 1); // Convert to 0-based index
+              }
+            }
+          }
+        }
+      } else {
+        final num = int.tryParse(trimmed);
+        if (num != null && num > 0 && num <= widget.document.pageCount) {
+          pages.add(num - 1); // Convert to 0-based index
+        }
+      }
+    }
+
+    return pages.toSet().toList()..sort();
+  }
+
+  /// Aggiungi immagine al PDF
+  void _addImage() async {
+    try {
+      final imagePath = await PdfManipulationService.pickImage();
+
+      if (imagePath == null) {
+        return;
+      }
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      // Aggiungi immagine alla prima pagina, centrata
+      final outputPath = await PdfManipulationService.addImageToPage(
+        filePath: widget.document.filePath,
+        pageIndex: 0,
+        imagePath: imagePath,
+        x: 50,
+        y: 50,
+        width: 200,
+        height: 200,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Immagine aggiunta! Salvato in: $outputPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Aggiungi link al PDF
+  void _addLink() async {
+    final TextEditingController urlController = TextEditingController();
+    final TextEditingController textController = TextEditingController();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Aggiungi link'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                labelText: 'URL',
+                hintText: 'https://esempio.com',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: textController,
+              decoration: const InputDecoration(
+                labelText: 'Testo (opzionale)',
+                hintText: 'Clicca qui',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annulla'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (urlController.text.isNotEmpty) {
+                Navigator.pop(context, {
+                  'url': urlController.text,
+                  'text': textController.text,
+                });
+              }
+            },
+            child: const Text('Aggiungi'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      _performAddLink(result['url']!, result['text']);
+    }
+  }
+
+  Future<void> _performAddLink(String url, String? text) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final outputPath = await PdfManipulationService.addLinkToPage(
+        filePath: widget.document.filePath,
+        pageIndex: 0,
+        url: url,
+        x: 50,
+        y: 100,
+        width: 200,
+        height: 30,
+        text: text,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Link aggiunto! Salvato in: $outputPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }
 

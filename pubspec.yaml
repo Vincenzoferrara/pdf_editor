@@ -31,10 +31,11 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # PDF Core
-  pdf: ^3.10.7
-  syncfusion_flutter_pdfviewer: ^28.1.33
-  printing: ^5.12.0
+  # PDF Core - Tutti opensource (MIT/Apache/BSD)
+  pdf: ^3.10.7  # Apache 2.0 - PDF creation & editing
+  printing: ^5.12.0  # BSD 3-Clause - Print PDFs
+  pdf_combiner: ^4.4.0  # MIT - Merge PDFs cross-platform
+  pdfrx: ^2.2.9  # MIT - PDF viewing & manipulation (già presente)
   
   # State Management
   flutter_riverpod: ^2.4.9
@@ -81,7 +82,6 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  pdfrx: ^2.2.9
 
 dev_dependencies:
   flutter_test:
